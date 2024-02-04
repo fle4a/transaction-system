@@ -5,6 +5,7 @@ Request params:
   - receiver_wallet_id: uuid
   - currency: string
   - amount: float
+  
 Response params:
   - message: string
   - id: uuid
