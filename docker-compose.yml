@@ -1,0 +1,111 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    ports:
+      - '6500:5432'
+
+    environment:
+      PGUSER: user
+      POSTGRES_PASSWORD: pass
+      POSTGRES_USER: user
+      POSTGRES_DB: postgres
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 22181:2181
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - 9092:9092
+    expose:
+      - "29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:29092,PLAINTEXT_INTERNAL://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+  init-kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: init-kafka
+    depends_on:
+      - kafka
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      echo -e 'Creating kafka topics'
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic to_create --replication-factor 1 --partitions 1
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic to_processing --replication-factor 1 --partitions 1   
+
+      echo -e 'Created kafka topics:'
+      kafka-topics --bootstrap-server kafka:9092 --list
+      "
+
+  create-service:
+    build:
+      context: ./create-service
+    container_name: create-service
+    ports:
+      - "8000:8000"
+    depends_on:
+      - init-kafka
+      - postgres
+    entrypoint: sh -c "sleep 30 && ./main"
+
+  gateway-service:
+    build:
+      context: ./gateway-service
+    container_name: gateway-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      - init-kafka
+      - balance-service
+    entrypoint: sh -c "sleep 30 && ./main"
+
+  withdraw-service:
+    build:
+      context: ./withdraw-service
+    container_name: withdraw-service
+    depends_on:
+      - init-kafka
+      - postgres
+      - invoice-service
+    ports:
+      - "8001:8001"
+    entrypoint: sh -c "sleep 30 && ./main"
+
+  invoice-service:
+    build:
+      context: ./invoice-service
+    container_name: invoice-service
+    ports:
+      - "8002:8002"
+    depends_on:
+      - postgres
+    entrypoint: sh -c "sleep 30 && ./main"
+
+  balance-service:
+    build:
+      context: ./balance-service
+    container_name: balance-service
+    ports:
+    - "8003:8003"
+    depends_on:
+      - postgres
+    entrypoint: sh -c "sleep 30 && ./main"
