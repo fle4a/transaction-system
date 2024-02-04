@@ -23,5 +23,5 @@ docker compose up
 
 6. Предварительный запуск для создания кошельков, сохраняемых в файл uuids.txt
 ```bash
-cd tests && go run && cd ..
+cd tests && go run src/test.go && cd ..
 ```
